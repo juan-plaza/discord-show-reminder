@@ -2,7 +2,14 @@
 
 $config = getContents(__DIR__ . '/config.json');
 
-$dateToday = (new DateTime())->setTimezone(new DateTimeZone('America/New_York'))->format('Y-m-d');
+try {
+    $dateToday = (new DateTime())->setTimezone(new DateTimeZone($config['timezone']))->format('Y-m-d');
+
+} catch (DateInvalidTimeZoneException $dateInvalidTimeZoneException) {
+    echo sprintf('Invalid timezone! Details: %s', $dateInvalidTimeZoneException->getMessage()) . PHP_EOL;
+    exit();
+}
+
 $numOfDays = 2; //Number of days to search
 
 $discordWebhook = $config['discord']['webhook'];
@@ -39,7 +46,7 @@ foreach($episodes as $episode) {
     $episodeTitle  = $episode['episode']['title'];
     $seasonNumber  = $episode['episode']['season'];
     $episodeNumber = $episode['episode']['number'];
-    $airDateTime   = convertStringToEasternDateTime($episode['first_aired']);
+    $airDateTime   = convertStringToEasternDateTime($episode['first_aired'], $config['timezone']);
 
     //Only work with episodes airing on current date
     if($dateToday !== $airDateTime->format('Y-m-d')) {
@@ -47,6 +54,7 @@ foreach($episodes as $episode) {
         continue;
     }
 
+    //Pull poster and streaming network
     echo "Pulling details for TV Show $showTitle..." . PHP_EOL;
     $tmdbData = sendRequest("$tmdbBaseUrl/$tmdbId?api_key=$tmdbApiKey", 'GET');
 
@@ -59,7 +67,9 @@ foreach($episodes as $episode) {
         $episodeDetails = json_decode($tmdbData['response'], true, 512, JSON_THROW_ON_ERROR);
 
     } catch (JsonException $jsonException) {
-        echo "Not able to read episode details from TMDB. Details: %s" . PHP_EOL;
+        echo sprintf("Not able to read episode details from TMDB. Details: %s", $jsonException->getMessage()) .
+            PHP_EOL;
+
         echo "Skipping..." . PHP_EOL;
         continue;
     }
@@ -68,6 +78,7 @@ foreach($episodes as $episode) {
     $networkPath    = $tmdbPosterBaseUrl . $episodeDetails['networks'][0]['logo_path'];
     $posterPath     = $tmdbPosterBaseUrl . $episodeDetails['poster_path'];
 
+    //Send to Discord
     try {
         $discordNotification = sendRequest($discordWebhook, 'POST', [
             'embeds' => [
@@ -90,7 +101,9 @@ foreach($episodes as $episode) {
         ], ['Content-Type: application/json']);
 
     } catch (JsonException $jsonException) {
-        echo "Not able to send notification to discord. Details: %s" . PHP_EOL;
+        echo sprintf("Not able to send notification to discord. Details: %s", $jsonException->getMessage()) .
+            PHP_EOL;
+
         echo "Skipping..." . PHP_EOL;
         continue;
     }
@@ -230,6 +243,7 @@ function sendRequest(string $url, string $method, array $body = [], array $heade
     }
 
     if ($body) {
+        //Handle JSON payloads
         if($headers && $headers[0] === 'Content-Type: application/json') {
             curl_setopt($curlHandle, CURLOPT_POSTFIELDS, json_encode($body, JSON_THROW_ON_ERROR));
         } else {
@@ -250,16 +264,22 @@ function sendRequest(string $url, string $method, array $body = [], array $heade
 
 /**
  * @param string $dateTime
+ * @param string $timezone
  * @return DateTime
  */
-function convertStringToEasternDateTime(string $dateTime): DateTime
+function convertStringToEasternDateTime(string $dateTime, string $timezone): DateTime
 {
     try {
         //Create DateTime object based off UTC string
         $date = new DateTime($dateTime, new DateTimeZone('UTC'));
 
-        // Convert to EST timezone
-        return $date->setTimezone(new DateTimeZone('America/New_York'));
+        // Convert to users timezone
+        try {
+            return $date->setTimezone(new DateTimeZone($timezone));
+        } catch (DateInvalidTimeZoneException $dateInvalidTimeZoneException) {
+            echo sprintf('Invalid timezone! Details: %s', $dateInvalidTimeZoneException->getMessage()) . PHP_EOL;
+            exit();
+        }
 
     } catch (DateMalformedStringException $malformedStringException) {
         echo sprintf('Not able to convert episode air time to EST: %s', $malformedStringException->getMessage())
