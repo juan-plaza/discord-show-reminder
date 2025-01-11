@@ -2,9 +2,11 @@
 
 ![Discord Notification](https://juanplaza.dev/images/discord-show-reminder.png "Discord Notification")
 
-A small script written in PHP to retrieve TV show details from a Trakt account and seamlessly deliver notifications to a Discord server. Notifications include comprehensive show information such as:
+
+A compact PHP script designed to retrieve TV show data from your Trakt account, fetch detailed episode information from TMDB, and seamlessly send notifications to a Discord server. Each notification includes comprehensive show details, such as:
+
 - Poster
 - Season
 - Episode
-- Air date & time
-- Steaming channel
+- Air date and time
+- Streaming channel
